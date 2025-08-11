@@ -1,0 +1,29 @@
+# === Build ===
+build/
+bin/
+*.o
+*.obj
+*.exe
+*.log
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+
+# === Temp files ===
+*.swp
+*.tmp
+*.bak
+*.DS_Store
+
+# === IDE files ===
+.vscode/
+.idea/
+*.code-workspace
+
+# === Sensitive config ===
+config.json
+*.key
+*.pem
+*.crt
+run.sh

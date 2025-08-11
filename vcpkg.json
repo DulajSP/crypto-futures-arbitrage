@@ -1,0 +1,5 @@
+{
+  "name": "futures-arbitrage-bot",
+  "version": "0.1.0",
+  "dependencies": ["ixwebsocket", "nlohmann-json", "openssl", "zlib"]
+}

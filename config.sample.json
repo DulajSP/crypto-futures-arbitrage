@@ -1,0 +1,29 @@
+{
+  "binance": {
+    "api_key": "",
+    "secret": ""
+  },
+  "bybit": {
+    "api_key": "",
+    "secret": ""
+  },
+  "dydx": {
+    "api_key": "",
+    "secret": ""
+  },
+  "symbols": [
+    "BTCUSDT",
+    "ETHUSDT",
+    "SOLUSDT",
+    "AVAXUSDT",
+    "XRPUSDT",
+    "LINKUSDT",
+    "DOGEUSDT"
+  ],
+  "minSpreadPercent": 0.1,
+  "checkIntervalSec": 0.1,
+  "log_level": "info",
+  "mode": "paper",
+  "paperFees": 0.04,
+  "maxPosUsd": 10000
+}
