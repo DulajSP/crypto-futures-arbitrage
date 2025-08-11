@@ -1,6 +1,6 @@
-# Crypto Arbitrage Bot (Binance, Bybit) 📈
+# Crypto Futures Arbitrage (Binance, Bybit, dydx) 📈
 
-A high-performance, real-time crypto arbitrage bot built in modern **C++20**, designed for both **paper trading** and (future) **live execution** across major exchanges.
+A high-performance, real-time crypto futures arbitrage engine built in modern **C++20**, designed for both **paper trading** and **live execution** across major exchanges.
 
 > **Note:** This project currently supports **paper trading only**. Live trading support is planned.
 
@@ -22,8 +22,8 @@ A high-performance, real-time crypto arbitrage bot built in modern **C++20**, de
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/DulajSP/crypto-arbitrage-bot.git
-cd crypto-arbitrage-bot
+git clone https://github.com/DulajSP/crypto-futures-arbitrage.git
+cd crypto-futures-arbitrage
 cp config.sample.json config.json
 ```
 
