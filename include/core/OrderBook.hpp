@@ -3,6 +3,7 @@
 #include <map>
 #include <vector>
 #include <mutex>
+#include <functional>
 
 // Thread-safe order book for managing bids and asks.
 class OrderBook {
@@ -10,12 +11,11 @@ public:
     OrderBook();
 
     using PriceLevel = std::pair<double, double>;  // (price, quantity)
-    using BookSide = std::map<double, double, std::greater<>>;  // price -> quantity, descending order for bids
+    using Bids = std::map<double, double, std::greater<>>; // highest -> lowest
+    using Asks = std::map<double, double, std::less<>>;    // lowest  -> highest
 
-    // Update or remove a bid price level.
+    // Update or remove a price level.
     void updateBid(double price, double quantity);
-
-    // Update or remove an ask price level.
     void updateAsk(double price, double quantity);
 
     // Return top N bids (highest price first).
@@ -34,13 +34,13 @@ public:
     double getTopBidQty() const;   
 
     // Get quantity at best ask price.
-    double getTopAskQty() const;   
+    double getTopAskQty() const;
 
     // Remove all bids and asks.
     void clear();
 
 private:
-    BookSide bids_;  // Bid side order book
-    BookSide asks_;  // Ask side order book
+    Bids bids_;  // Bid side order book
+    Asks asks_;  // Ask side order book
     mutable std::mutex mutex_;  // Protects order book for thread safety
 };

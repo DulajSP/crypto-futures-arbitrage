@@ -23,6 +23,7 @@ void OrderBook::clear() {
 std::vector<OrderBook::PriceLevel> OrderBook::getTopNBids(size_t n) const {
     std::lock_guard<std::mutex> lock(mutex_);
     std::vector<PriceLevel> result;
+    result.reserve(n);
     for (const auto& [price, qty] : bids_) {
         if (qty > 0.0) result.emplace_back(price, qty);
         if (result.size() >= n) break;
@@ -33,9 +34,9 @@ std::vector<OrderBook::PriceLevel> OrderBook::getTopNBids(size_t n) const {
 std::vector<OrderBook::PriceLevel> OrderBook::getTopNAsks(size_t n) const {
     std::lock_guard<std::mutex> lock(mutex_);
     std::vector<PriceLevel> result;
-    // Iterate in reverse to get lowest ask prices first
-    for (auto it = asks_.rbegin(); it != asks_.rend(); ++it) {
-        if (it->second > 0.0) result.emplace_back(it->first, it->second);
+    result.reserve(n);
+    for (const auto& [price, qty] : asks_) {
+        if (qty > 0.0) result.emplace_back(price, qty);
         if (result.size() >= n) break;
     }
     return result;
