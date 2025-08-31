@@ -39,6 +39,7 @@ private:
 
     mutable std::mutex mutex_; // Protects access to orderBooks_ and wsClients_
     std::unordered_map<std::string, std::shared_ptr<OrderBook>> orderBooks_; // Symbol -> OrderBook
-    std::unordered_map<std::string, std::unique_ptr<ix::WebSocket>> wsClients_; // Symbol -> WebSocket client
+    std::unordered_map<std::string, std::shared_ptr<ix::WebSocket>> wsClients_; // Symbol -> WebSocket client
+    std::unordered_map<std::string, bool> reconnecting_; 
     bool connected_ = false; // Connection status
 };
