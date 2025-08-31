@@ -1,5 +1,6 @@
 #include "exchange/BybitFuturesClient.hpp"
 #include "common/Logger.hpp"
+#include "core/Watchdog.hpp"
 
 #include <nlohmann/json.hpp>
 #include <algorithm>
@@ -52,6 +53,10 @@ void BybitFuturesClient::subscribeOrderBook(const std::string& symbol) {
     }
 
     startWebSocket(symbol);
+}
+
+void BybitFuturesClient::requestReconnect(const std::string& symbol) {
+    reconnectWithDelay(symbol);
 }
 
 void BybitFuturesClient::startWebSocket(const std::string& symbol) {
@@ -115,6 +120,10 @@ void BybitFuturesClient::startWebSocket(const std::string& symbol) {
                             ob->updateAsk(price, qty);
                         }
                     }
+
+                    // Notify watchdog of fresh orderbook update
+                    if (watchdog_) watchdog_->markUpdate(getExchangeName(), "orderbook", symbol);
+
                 } else if (type == "delta") {
                     if (data.contains("b")) {
                         for (const auto& bid : data["b"]) {
@@ -130,6 +139,10 @@ void BybitFuturesClient::startWebSocket(const std::string& symbol) {
                             ob->updateAsk(price, qty);
                         }
                     }
+
+                    // Notify watchdog of fresh orderbook update
+                    if (watchdog_) watchdog_->markUpdate(getExchangeName(), "orderbook", symbol);
+
                 }
             } catch (const std::exception& ex) {
                 Logger::error("Bybit WebSocket parse error (" + symbol + "): " + std::string(ex.what()));
@@ -165,22 +178,30 @@ void BybitFuturesClient::reconnectWithDelay(const std::string& symbol) {
         reconnecting_[symbol] = true;
     }
 
-    // Reconnect logic runs in a detached thread to avoid blocking
     std::thread([this, symbol]() {
-        Logger::info("Reconnecting to Bybit for " + symbol + " after 3 seconds...");
-        std::this_thread::sleep_for(std::chrono::seconds(3));
+        try {
+            Logger::info("Reconnecting to Bybit for " + symbol + "...");
+            std::this_thread::sleep_for(std::chrono::seconds(3));
 
-        {
-            std::lock_guard<std::mutex> lock(mutex_);
-            auto it = wsClients_.find(symbol);
-            if (it != wsClients_.end()) {
-                Logger::info("Stopping old WebSocket before reconnecting: " + symbol);
-                it->second->stop();
-                wsClients_.erase(it);
+            std::shared_ptr<ix::WebSocket> old;
+            {
+                std::lock_guard<std::mutex> lock(mutex_);
+                auto it = wsClients_.find(symbol);
+                if (it != wsClients_.end()) {
+                    old = it->second;
+                    wsClients_.erase(it);
+                    Logger::info("Stopping old Bybit WebSocket before reconnecting: " + symbol);
+                }
             }
-        }
+            if (old) old->stop();
 
-        startWebSocket(symbol);
+            startWebSocket(symbol);
+
+        } catch (const std::exception& e) {
+            Logger::error("Reconnect thread exception for " + symbol + " (Bybit): " + e.what());
+        } catch (...) {
+            Logger::error("Reconnect thread unknown exception for " + symbol + " (Bybit)");
+        }
 
         {
             std::lock_guard<std::mutex> lock(mutex_);

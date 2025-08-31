@@ -1,9 +1,12 @@
 #include "common/ConfigManager.hpp"
 #include "common/Logger.hpp"
 #include "core/ArbitrageEngine.hpp"
+#include "core/Watchdog.hpp"
+
 #include "exchange/BinanceFuturesClient.hpp"
 #include "exchange/BybitFuturesClient.hpp"
 #include "exchange/DydxFuturesClient.hpp"
+#include "core/PaperTrader.hpp"
 
 int main() {
     Logger::info("=== Starting Arbitrage Bot ===");
@@ -28,21 +31,32 @@ int main() {
     bybit->connect();
     dydx->connect();
 
+    // --- Watchdog setup ---
+    Watchdog watchdog;
+    binance->setWatchdog(&watchdog);
+    bybit->setWatchdog(&watchdog);
+    dydx->setWatchdog(&watchdog);
+
+    watchdog.registerMarketClient(binance, symbols);
+    watchdog.registerMarketClient(bybit, symbols);
+    watchdog.registerMarketClient(dydx, symbols);
+    watchdog.start();
+
     // Subscribe to order books for all symbols
     for (const auto& sym : symbols) {
         binance->subscribeOrderBook(sym);
         bybit->subscribeOrderBook(sym);
-        dydx->subscribeOrderBook(sym);   
+        dydx->subscribeOrderBook(sym);
     }
 
     // Set up arbitrage engine
     ArbitrageEngine engine;
     engine.addExchangeClient(binance);
     engine.addExchangeClient(bybit);
-    engine.addExchangeClient(dydx);   
+    engine.addExchangeClient(dydx);
     engine.setSymbols(symbols);
     engine.setConfig(minSpread, intervalSec, maxPos, rebalanceMinSpread);
-    
+
     // Register executors: paper or live
     if (mode == "paper") {
         engine.addExecutor(binance->getExchangeName(), std::make_shared<PaperTrader>(binance->getExchangeName(), fees));

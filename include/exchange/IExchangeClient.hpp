@@ -18,6 +18,9 @@ public:
     // Subscribe to order book updates for a symbol.
     virtual void subscribeOrderBook(const std::string& symbol) = 0;
 
+    // reconnect hook for watchdog / callers
+    virtual void requestReconnect(const std::string& symbol) = 0;
+
     // Get the current order book for a symbol.
     virtual std::shared_ptr<OrderBook> getOrderBook(const std::string& symbol) const = 0;
 

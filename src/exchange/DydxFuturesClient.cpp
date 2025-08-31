@@ -1,5 +1,6 @@
 #include "exchange/DydxFuturesClient.hpp"
 #include "common/Logger.hpp"
+#include "core/Watchdog.hpp"
 
 #include <nlohmann/json.hpp>
 #include <algorithm>
@@ -50,6 +51,10 @@ void DydxFuturesClient::subscribeOrderBook(const std::string& engineSymbol) {
     }
 
     startWebSocket(engineSymbol);
+}
+
+void DydxFuturesClient::requestReconnect(const std::string& symbol) {
+    reconnectWithDelay(symbol);
 }
 
 void DydxFuturesClient::startWebSocket(const std::string& engineSymbol) {
@@ -109,6 +114,10 @@ void DydxFuturesClient::startWebSocket(const std::string& engineSymbol) {
                                 }
                             }
                             Logger::info("dYdX snapshot loaded for " + engineSymbol);
+
+
+                            // Notify watchdog of fresh orderbook update
+                            if (watchdog_) watchdog_->markUpdate(getExchangeName(), "orderbook", engineSymbol);
                         }
                     }
                     return;
@@ -131,6 +140,9 @@ void DydxFuturesClient::startWebSocket(const std::string& engineSymbol) {
                                 ob->updateAsk(price, qty);
                             }
                         }
+
+                        // Notify watchdog of fresh orderbook update
+                        if (watchdog_) watchdog_->markUpdate(getExchangeName(), "orderbook", engineSymbol);
                     }
                     return;
                 }
@@ -160,20 +172,29 @@ void DydxFuturesClient::reconnectWithDelay(const std::string& engineSymbol) {
     }
 
     std::thread([this, engineSymbol]() {
-        Logger::info("Reconnecting dYdX for " + engineSymbol + " after 3 seconds...");
-        std::this_thread::sleep_for(std::chrono::seconds(3));
+        try {
+            Logger::info("Reconnecting dYdX for " + engineSymbol + "...");
+            std::this_thread::sleep_for(std::chrono::seconds(3));
 
-        {
-            std::lock_guard<std::mutex> lock(mutex_);
-            auto it = wsClients_.find(engineSymbol);
-            if (it != wsClients_.end()) {
-                Logger::info("Stopping old dYdX WebSocket before reconnecting: " + engineSymbol);
-                it->second->stop();
-                wsClients_.erase(it);
+            std::shared_ptr<ix::WebSocket> old;
+            {
+                std::lock_guard<std::mutex> lock(mutex_);
+                auto it = wsClients_.find(engineSymbol);
+                if (it != wsClients_.end()) {
+                    old = it->second;
+                    wsClients_.erase(it);
+                    Logger::info("Stopping old dYdX WebSocket before reconnecting: " + engineSymbol);
+                } 
             }
-        }
+            if (old) old->stop();
 
-        startWebSocket(engineSymbol);
+            startWebSocket(engineSymbol);
+
+        } catch (const std::exception& e) {
+            Logger::error("Reconnect thread exception for " + engineSymbol + " (dYdX): " + std::string(e.what()));
+        } catch (...) {
+            Logger::error("Reconnect thread unknown exception for " + engineSymbol + " (dYdX)");
+        }
 
         {
             std::lock_guard<std::mutex> lock(mutex_);

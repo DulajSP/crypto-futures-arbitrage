@@ -1,5 +1,6 @@
 #include "exchange/BinanceFuturesClient.hpp"
 #include "common/Logger.hpp"
+#include "core/Watchdog.hpp"
 
 #include <nlohmann/json.hpp>
 #include <algorithm>
@@ -53,6 +54,10 @@ void BinanceFuturesClient::subscribeOrderBook(const std::string& symbol) {
     startWebSocket(symbol);
 }
 
+void BinanceFuturesClient::requestReconnect(const std::string& symbol) {
+    reconnectWithDelay(symbol);  
+}
+
 void BinanceFuturesClient::startWebSocket(const std::string& symbol) {
     std::string lowerSymbol = symbol;
     std::transform(lowerSymbol.begin(), lowerSymbol.end(), lowerSymbol.begin(), ::tolower);
@@ -94,6 +99,9 @@ void BinanceFuturesClient::startWebSocket(const std::string& symbol) {
                         double qty   = std::stod(ask[1].get<std::string>());
                         ob->updateAsk(price, qty);
                     }
+
+                    // Notify watchdog of fresh orderbook update
+                    if (watchdog_) watchdog_->markUpdate(getExchangeName(), "orderbook", symbol);
                 }
             } catch (const std::exception& ex) {
                 Logger::error("Binance WebSocket parse error (" + symbol + "): " + std::string(ex.what()));
@@ -130,22 +138,30 @@ void BinanceFuturesClient::reconnectWithDelay(const std::string& symbol) {
         reconnecting_[symbol] = true;
     }
 
-    // Reconnect logic runs in a detached thread to avoid blocking
     std::thread([this, symbol]() {
-        Logger::info("Reconnecting to Binance for " + symbol + " after 3 seconds...");
-        std::this_thread::sleep_for(std::chrono::seconds(3));
+        try {
+            Logger::info("Reconnecting to Binance for " + symbol + "...");
+            std::this_thread::sleep_for(std::chrono::seconds(3));
 
-        {
-            std::lock_guard<std::mutex> lock(mutex_);
-            auto it = wsClients_.find(symbol);
-            if (it != wsClients_.end()) {
-                Logger::info("Stopping old Binance WebSocket before reconnecting: " + symbol);
-                it->second->stop();
-                wsClients_.erase(it);
+            std::shared_ptr<ix::WebSocket> old;
+            {
+                std::lock_guard<std::mutex> lock(mutex_);
+                auto it = wsClients_.find(symbol);
+                if (it != wsClients_.end()) {
+                    old = it->second;
+                    wsClients_.erase(it);
+                    Logger::info("Stopping old Binance WebSocket before reconnecting: " + symbol);
+                }
             }
-        }
+            if (old) old->stop();
 
-        startWebSocket(symbol);
+            startWebSocket(symbol);
+
+        } catch (const std::exception& e) {
+            Logger::error("Reconnect thread exception for " + symbol + ": " + e.what());
+        } catch (...) {
+            Logger::error("Reconnect thread unknown exception for " + symbol);
+        }
 
         {
             std::lock_guard<std::mutex> lock(mutex_);
