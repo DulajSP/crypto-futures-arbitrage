@@ -58,7 +58,14 @@ void ArbitrageEngine::start() {
     Logger::info("Starting Arbitrage Engine...");
     while (true) {
         for (const auto& symbol : symbols_) {
-            checkArbitrage(symbol);
+            
+            try {
+                checkArbitrage(symbol);
+            } catch (const std::exception& e) {
+                Logger::error(std::string("ArbitrageEngine exception: ") + e.what());
+            } catch (...) {
+                Logger::error("ArbitrageEngine exception: unknown");
+            }
         }
         std::this_thread::sleep_for(std::chrono::duration<double>(checkIntervalSec_));
     }
@@ -73,7 +80,7 @@ void ArbitrageEngine::checkArbitrage(const std::string& symbol) {
 
     for (const auto& exchange : exchanges_) {
         auto ob = exchange->getOrderBook(symbol);
-        if (!ob) continue;
+        if (!ob || ob->getTopBidPrice() >= ob->getTopAskPrice()) continue;
 
         if (ob->getTopBidPrice() > bestBid) {
             bestBid = ob->getTopBidPrice();
@@ -87,6 +94,12 @@ void ArbitrageEngine::checkArbitrage(const std::string& symbol) {
             askExchange = exchange;
         }
     }
+
+    // // log for testing
+    // if (bestBid>0.0){
+    //     Logger::info("OrderBook " + symbol + " | BestAsk " + (askExchange ? askExchange->getExchangeName() : "Unknown") + " | "+ std::to_string(bestAsk) +
+    //                     " | Bestbid " +  (bidExchange ? bidExchange->getExchangeName(): "Unknown") + " | "+ std::to_string(bestBid));
+    // }
 
     if (bestBid <= 0.0 || bestAsk >= bestBid) return;
 
@@ -115,10 +128,10 @@ void ArbitrageEngine::checkArbitrage(const std::string& symbol) {
         double sellCapQty = sellRoomUsd / bestBid;
 
         double reqQty = std::max(0.0, std::min({ obCapQty, buyCapQty, sellCapQty }));
-        if (reqQty <= 0.0) return;
+        if (reqQty * bestAsk <= 10.0) return;
 
-        Logger::info("ARB " + symbol + " | BUY " + exchangeBuy + " @" + std::to_string(bestAsk) +
-                    " | SELL " + exchangeSell + " @" + std::to_string(bestBid) +
+        Logger::info("ARB >> " + symbol + " | BUY " + exchangeBuy + " @ " + std::to_string(bestAsk) +
+                    " | SELL " + exchangeSell + " @ " + std::to_string(bestBid) +
                     " | Spread=" + std::to_string(spreadPct) + "% | Qty=" + std::to_string(reqQty));
 
         // Execute both legs

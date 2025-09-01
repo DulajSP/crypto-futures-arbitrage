@@ -8,7 +8,7 @@ A high-performance, real-time crypto futures arbitrage engine built in modern **
 
 ## 🚀 Features
 
-- Real-time order book data from **Binance** and **Bybit** USDT futures
+- Real-time order book data from **Binance** , **dydx** and **Bybit** USDT futures
 - Fast, configurable arbitrage detection and execution logic
 - Paper trading mode with fee simulation
 - Modular, exchange-agnostic architecture

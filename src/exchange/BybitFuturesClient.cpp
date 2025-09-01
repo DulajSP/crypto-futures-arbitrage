@@ -1,5 +1,6 @@
 #include "exchange/BybitFuturesClient.hpp"
 #include "common/Logger.hpp"
+#include "core/Watchdog.hpp"
 
 #include <nlohmann/json.hpp>
 #include <algorithm>
@@ -32,6 +33,8 @@ void BybitFuturesClient::disconnect() {
         ws->stop();
     }
     wsClients_.clear();
+    orderBooks_.clear();
+    reconnecting_.clear();
     connected_ = false;
 }
 
@@ -52,6 +55,10 @@ void BybitFuturesClient::subscribeOrderBook(const std::string& symbol) {
     startWebSocket(symbol);
 }
 
+void BybitFuturesClient::requestReconnect(const std::string& symbol) {
+    reconnectWithDelay(symbol);
+}
+
 void BybitFuturesClient::startWebSocket(const std::string& symbol) {
     std::string upperSymbol = symbol;
     std::transform(upperSymbol.begin(), upperSymbol.end(), upperSymbol.begin(), ::toupper);
@@ -66,65 +73,93 @@ void BybitFuturesClient::startWebSocket(const std::string& symbol) {
         ob = orderBooks_[symbol];
     }
 
-    auto ws = std::make_unique<ix::WebSocket>();
+    auto ws = std::make_shared<ix::WebSocket>();
     ws->setUrl(url);
 
-    ws->setOnMessageCallback([this, symbol, topic, ob](const ix::WebSocketMessagePtr& msg) {
-        if (msg->type == ix::WebSocketMessageType::Message) {
-            try {
-                auto json = nlohmann::json::parse(msg->str);
+    // weak_ptr so the lambda doesn't keep the socket alive
+    std::weak_ptr<ix::WebSocket> wsWeak = ws;
 
-                if (!json.contains("topic") || json["topic"] != topic) return;
-
-                std::string type = json.value("type", "");
-                const auto& data = json["data"];
-
-                if (type == "snapshot") {
-                    ob->clear(); // Full reset on snapshot
-
-                    for (const auto& bid : data["b"]) {
-                        double price = std::stod(bid[0].get<std::string>());
-                        double qty   = std::stod(bid[1].get<std::string>());
-                        ob->updateBid(price, qty);
-                    }
-
-                    for (const auto& ask : data["a"]) {
-                        double price = std::stod(ask[0].get<std::string>());
-                        double qty   = std::stod(ask[1].get<std::string>());
-                        ob->updateAsk(price, qty);
-                    }
-                } else if (type == "delta") {
-                    for (const auto& bid : data["b"]) {
-                        double price = std::stod(bid[0].get<std::string>());
-                        double qty   = std::stod(bid[1].get<std::string>());
-                        ob->updateBid(price, qty);
-                    }
-
-                    for (const auto& ask : data["a"]) {
-                        double price = std::stod(ask[0].get<std::string>());
-                        double qty   = std::stod(ask[1].get<std::string>());
-                        ob->updateAsk(price, qty);
-                    }
-                }
-            } catch (const std::exception& ex) {
-                Logger::error("Bybit WebSocket parse error: " + std::string(ex.what()));
-            }
-        } else if (msg->type == ix::WebSocketMessageType::Open) {
-            Logger::info("WebSocket opened for: " + symbol);
+    ws->setOnMessageCallback([this, symbol, topic, ob, wsWeak](const ix::WebSocketMessagePtr& msg) {
+        if (msg->type == ix::WebSocketMessageType::Open) {
+            Logger::info("Bybit WebSocket opened for: " + symbol);
 
             nlohmann::json subscribeMsg = {
                 {"op", "subscribe"},
                 {"args", {topic}}
             };
 
-            std::lock_guard<std::mutex> lock(mutex_);
-            wsClients_[symbol]->send(subscribeMsg.dump());
-        } else if (msg->type == ix::WebSocketMessageType::Error) {
-            Logger::error("WebSocket error for " + symbol + ": " + msg->errorInfo.reason);
+            if (auto s = wsWeak.lock()) {
+                s->send(subscribeMsg.dump());
+            }
+            return;
+        }
+
+        if (msg->type == ix::WebSocketMessageType::Message) {
+            try {
+                auto json = nlohmann::json::parse(msg->str);
+
+                if (!json.contains("topic") || json["topic"] != topic) return;
+
+                const std::string type = json.value("type", "");
+                if (!json.contains("data")) return;
+                const auto& data = json["data"];
+
+                if (type == "snapshot") {
+                    ob->clear(); // full reset
+                    if (data.contains("b")) {
+                        for (const auto& bid : data["b"]) {
+                            double price = std::stod(bid[0].get<std::string>());
+                            double qty   = std::stod(bid[1].get<std::string>());
+                            ob->updateBid(price, qty);
+                        }
+                    }
+                    if (data.contains("a")) {
+                        for (const auto& ask : data["a"]) {
+                            double price = std::stod(ask[0].get<std::string>());
+                            double qty   = std::stod(ask[1].get<std::string>());
+                            ob->updateAsk(price, qty);
+                        }
+                    }
+
+                    // Notify watchdog of fresh orderbook update
+                    if (watchdog_) watchdog_->markUpdate(getExchangeName(), "orderbook", symbol);
+
+                } else if (type == "delta") {
+                    if (data.contains("b")) {
+                        for (const auto& bid : data["b"]) {
+                            double price = std::stod(bid[0].get<std::string>());
+                            double qty   = std::stod(bid[1].get<std::string>());
+                            ob->updateBid(price, qty); 
+                        }
+                    }
+                    if (data.contains("a")) {
+                        for (const auto& ask : data["a"]) {
+                            double price = std::stod(ask[0].get<std::string>());
+                            double qty   = std::stod(ask[1].get<std::string>());
+                            ob->updateAsk(price, qty);
+                        }
+                    }
+
+                    // Notify watchdog of fresh orderbook update
+                    if (watchdog_) watchdog_->markUpdate(getExchangeName(), "orderbook", symbol);
+
+                }
+            } catch (const std::exception& ex) {
+                Logger::error("Bybit WebSocket parse error (" + symbol + "): " + std::string(ex.what()));
+            }
+            return;
+        }
+
+        if (msg->type == ix::WebSocketMessageType::Error) {
+            Logger::error("Bybit WebSocket error for " + symbol + ": " + msg->errorInfo.reason);
             reconnectWithDelay(symbol);
-        } else if (msg->type == ix::WebSocketMessageType::Close) {
-            Logger::info("WebSocket closed for symbol: " + symbol);
+            return;
+        }
+
+        if (msg->type == ix::WebSocketMessageType::Close) {
+            Logger::info("Bybit WebSocket closed for symbol: " + symbol);
             reconnectWithDelay(symbol);
+            return;
         }
     });
 
@@ -132,36 +167,53 @@ void BybitFuturesClient::startWebSocket(const std::string& symbol) {
 
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        wsClients_[symbol] = std::move(ws);
+        wsClients_[symbol] = ws; // store shared_ptr
     }
 }
 
 void BybitFuturesClient::reconnectWithDelay(const std::string& symbol) {
-    // Reconnect logic runs in a detached thread to avoid blocking
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (reconnecting_[symbol]) return;
+        reconnecting_[symbol] = true;
+    }
+
     std::thread([this, symbol]() {
-        Logger::info("Reconnecting to Bybit for " + symbol + " after 3 seconds...");
-        std::this_thread::sleep_for(std::chrono::seconds(3));
+        try {
+            Logger::info("Reconnecting to Bybit for " + symbol + "...");
+            std::this_thread::sleep_for(std::chrono::seconds(3));
+
+            std::shared_ptr<ix::WebSocket> old;
+            {
+                std::lock_guard<std::mutex> lock(mutex_);
+                auto it = wsClients_.find(symbol);
+                if (it != wsClients_.end()) {
+                    old = it->second;
+                    wsClients_.erase(it);
+                    Logger::info("Stopping old Bybit WebSocket before reconnecting: " + symbol);
+                }
+            }
+            if (old) old->stop();
+
+            startWebSocket(symbol);
+
+        } catch (const std::exception& e) {
+            Logger::error("Reconnect thread exception for " + symbol + " (Bybit): " + e.what());
+        } catch (...) {
+            Logger::error("Reconnect thread unknown exception for " + symbol + " (Bybit)");
+        }
 
         {
             std::lock_guard<std::mutex> lock(mutex_);
-            auto it = wsClients_.find(symbol);
-            if (it != wsClients_.end()) {
-                Logger::info("Stopping old WebSocket before reconnecting: " + symbol);
-                it->second->stop();
-                wsClients_.erase(it);
-            }
+            reconnecting_[symbol] = false;
         }
-
-        startWebSocket(symbol);
     }).detach();
 }
 
 std::shared_ptr<OrderBook> BybitFuturesClient::getOrderBook(const std::string& symbol) const {
     std::lock_guard<std::mutex> lock(mutex_);
     auto it = orderBooks_.find(symbol);
-    if (it != orderBooks_.end()) {
-        return it->second;
-    }
+    if (it != orderBooks_.end()) return it->second;
     return nullptr;
 }
 

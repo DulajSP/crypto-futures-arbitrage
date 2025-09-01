@@ -2,6 +2,7 @@
 
 #include "exchange/IExchangeClient.hpp"
 #include "core/OrderBook.hpp"
+#include "core/Watchdog.hpp"
 
 #include <ixwebsocket/IXWebSocket.h>
 #include <unordered_map>
@@ -30,6 +31,12 @@ public:
     // Returns the exchange name ("bybit_futures").
     std::string getExchangeName() const override;
 
+    // reconnect hook for watchdog / callers
+    void requestReconnect(const std::string& symbol) override;
+
+    // Hook for the multi-channel watchdog (non-owning)
+    void setWatchdog(Watchdog* wd) { watchdog_ = wd; }
+
 private:
     // Start a WebSocket connection for a symbol.
     void startWebSocket(const std::string& symbol);
@@ -39,6 +46,9 @@ private:
 
     mutable std::mutex mutex_; // Protects access to orderBooks_ and wsClients_
     std::unordered_map<std::string, std::shared_ptr<OrderBook>> orderBooks_; // Symbol -> OrderBook
-    std::unordered_map<std::string, std::unique_ptr<ix::WebSocket>> wsClients_; // Symbol -> WebSocket client
+    std::unordered_map<std::string, std::shared_ptr<ix::WebSocket>> wsClients_; // Symbol -> WebSocket client
+    std::unordered_map<std::string, bool> reconnecting_; 
     bool connected_ = false; // Connection status
+
+    Watchdog* watchdog_ = nullptr; // not owning
 };

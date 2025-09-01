@@ -10,13 +10,13 @@
 #include <mutex>
 #include <memory>
 
-// Binance USDT futures exchange client (WebSocket-based).
-class BinanceFuturesClient : public IExchangeClient {
+// dYdX v4 futures exchange client (WebSocket-based).
+class DydxFuturesClient : public IExchangeClient {
 public:
-    BinanceFuturesClient();
-    ~BinanceFuturesClient() override;
+    DydxFuturesClient();
+    ~DydxFuturesClient() override;
 
-    // Establish WebSocket connection(s) to Binance.
+    // Establish WebSocket connection(s) to Dydx.
     void connect() override;
 
     // Disconnect all WebSocket connections.
@@ -28,7 +28,7 @@ public:
     // Get the current order book for a symbol.
     std::shared_ptr<OrderBook> getOrderBook(const std::string& symbol) const override;
 
-    // Returns the exchange name ("binance_futures").
+    // Returns the exchange name.
     std::string getExchangeName() const override;
 
     // reconnect hook for watchdog / callers
@@ -44,9 +44,14 @@ private:
     // Attempt to reconnect after a delay.
     void reconnectWithDelay(const std::string& symbol);
 
+    // Symbol conversion helpers:
+    // Engine format (e.g. "BTCUSDT") <-> dYdX format (e.g. "BTC-USD")
+    static std::string toDydxSymbol(const std::string& engineSymbol);
+    static std::string fromDydxSymbol(const std::string& dydxSymbol);
+
     mutable std::mutex mutex_; // Protects access to orderBooks_ and wsClients_
-    std::unordered_map<std::string, std::shared_ptr<OrderBook>> orderBooks_; // Symbol -> OrderBook
-    std::unordered_map<std::string, std::shared_ptr<ix::WebSocket>> wsClients_; // Symbol -> WebSocket client
+    std::unordered_map<std::string, std::shared_ptr<OrderBook>> orderBooks_; // Symbol -> OrderBook;
+    std::unordered_map<std::string, std::shared_ptr<ix::WebSocket>> wsClients_; 
     std::unordered_map<std::string, bool> reconnecting_; 
     bool connected_ = false; // Connection status
 
