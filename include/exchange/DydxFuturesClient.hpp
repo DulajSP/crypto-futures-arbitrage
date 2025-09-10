@@ -35,7 +35,7 @@ public:
     void requestReconnect(const std::string& symbol) override;
 
     // Hook for the multi-channel watchdog (non-owning)
-    void setWatchdog(Watchdog* wd) { watchdog_ = wd; }
+    void setWatchdog(Watchdog* wd) override { watchdog_ = wd; }
 
 private:
     // Start a WebSocket connection for a symbol.
@@ -43,11 +43,6 @@ private:
 
     // Attempt to reconnect after a delay.
     void reconnectWithDelay(const std::string& symbol);
-
-    // Symbol conversion helpers:
-    // Engine format (e.g. "BTCUSDT") <-> dYdX format (e.g. "BTC-USD")
-    static std::string toDydxSymbol(const std::string& engineSymbol);
-    static std::string fromDydxSymbol(const std::string& dydxSymbol);
 
     mutable std::mutex mutex_; // Protects access to orderBooks_ and wsClients_
     std::unordered_map<std::string, std::shared_ptr<OrderBook>> orderBooks_; // Symbol -> OrderBook;

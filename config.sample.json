@@ -1,15 +1,15 @@
 {
   "binance": {
-    "api_key": "",
-    "secret": ""
+    "api_key": "your_binance_api_key",
+    "secret": "your_binance_secret_key"
   },
   "bybit": {
-    "api_key": "",
-    "secret": ""
+    "api_key": "your_bybit_api_key",
+    "secret": "your_bybit_secret_key"
   },
   "dydx": {
-    "api_key": "",
-    "secret": ""
+    "subaccount_number": "your_dydx_subaccount_number",
+    "mnemonic": "your_dydx_wallet_mnemonic"
   },
   "symbols": [
     "BTCUSDT",
@@ -23,7 +23,7 @@
   "minSpreadPercent": 0.1,
   "checkIntervalSec": 0.1,
   "log_level": "info",
-  "mode": "paper",
-  "paperFees": 0.04,
+  "mode": "live",
+  "fees": 0.04,
   "maxPosUsd": 10000
 }

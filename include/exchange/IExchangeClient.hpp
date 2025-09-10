@@ -3,6 +3,7 @@
 #include <string>
 #include <memory>
 #include "core/OrderBook.hpp"
+#include "core/Watchdog.hpp"
 
 // Interface for exchange clients.
 class IExchangeClient {
@@ -26,4 +27,7 @@ public:
 
     // Returns the exchange name (e.g., "binance_futures").
     virtual std::string getExchangeName() const = 0;
+
+    // Hook for the multi-channel watchdog (non-owning)
+    virtual void setWatchdog(Watchdog* wd) = 0;
 };

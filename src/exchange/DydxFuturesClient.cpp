@@ -1,5 +1,6 @@
 #include "exchange/DydxFuturesClient.hpp"
 #include "common/Logger.hpp"
+#include "common/Helper.hpp"
 #include "core/Watchdog.hpp"
 
 #include <nlohmann/json.hpp>
@@ -59,7 +60,7 @@ void DydxFuturesClient::requestReconnect(const std::string& symbol) {
 
 void DydxFuturesClient::startWebSocket(const std::string& engineSymbol) {
     // Engine symbol is like "BTCUSDT"; convert to dYdX "BTC-USD"
-    const std::string dydxSym = toDydxSymbol(engineSymbol);
+    const std::string dydxSym = Helper::toDydxSymbol(engineSymbol);
     const std::string url = "wss://indexer.dydx.trade/v4/ws";
 
     Logger::info("Connecting to dYdX v4 orderbook for: " + engineSymbol + " (as " + dydxSym + ")");
@@ -212,33 +213,4 @@ std::shared_ptr<OrderBook> DydxFuturesClient::getOrderBook(const std::string& sy
 
 std::string DydxFuturesClient::getExchangeName() const {
     return "dYdX Futures";
-}
-
-// Symbol conversions
-// "BTCUSDT" (engine) -> "BTC-USD" (dYdX)
-std::string DydxFuturesClient::toDydxSymbol(const std::string& engineSymbol) {
-    std::string s = engineSymbol;
-    // Basic rule: if ends with "USDT", replace with "-USD"
-    const std::string suffix = "USDT";
-    if (s.size() > suffix.size() && s.rfind(suffix) == s.size() - suffix.size()) {
-        std::string base = s.substr(0, s.size() - suffix.size());
-        return base + "-USD";
-    }
-    // If already looks like "BTC-USD", return as-is
-    if (s.find('-') != std::string::npos) return s;
-
-    return s; 
-}
-
-// "BTC-USD" (dYdX) -> "BTCUSDT" (engine)
-std::string DydxFuturesClient::fromDydxSymbol(const std::string& dydxSymbol) {
-    std::string s = dydxSymbol;
-    auto pos = s.find('-');
-    if (pos != std::string::npos) {
-        std::string base = s.substr(0, pos);
-        std::string quote = s.substr(pos + 1);
-        if (quote == "USD") quote = "USDT"; // engine uses USDT-quoted symbols
-        return base + quote;
-    }
-    return s;
 }

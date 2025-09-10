@@ -1,6 +1,5 @@
 #pragma once
 
-#include "exchange/IExchangeClient.hpp"
 #include "core/OrderBook.hpp"
 #include "common/Logger.hpp"
 
@@ -11,6 +10,8 @@
 #include <atomic>
 #include <chrono>
 #include <mutex>
+
+class IExchangeClient;
 
 // Identify a feed uniquely: exchange + channel + optional symbol
 struct FeedKey {
