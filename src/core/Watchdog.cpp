@@ -1,4 +1,5 @@
 #include "core/Watchdog.hpp"
+#include "exchange/IExchangeClient.hpp"
 
 using namespace std::chrono;
 

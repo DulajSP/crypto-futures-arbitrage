@@ -2,6 +2,7 @@
 
 #include <string>
 #include <vector>
+#include <nlohmann/json.hpp>
 
 // Manages loading and accessing configuration parameters.
 class ConfigManager {
@@ -9,7 +10,13 @@ public:
     // Loads configuration (default: "config.json").
     static void load(const std::string& filePath = "config.json");
 
-    // Getters for configuration parameters.
+    // Generic accessors
+    static std::string getString(const std::string& path,
+                                 const std::string& def = "");
+    static double getNumber(const std::string& path,
+                            double def = 0.0);
+
+    // Convenience wrappers
     static std::vector<std::string> getSymbols();           // Returns trading symbols.
     static std::string getMode();                           // Returns mode (e.g., "paper", "live").
     static double getFeesPercent();                         // Returns paper trading fee percent.
@@ -19,7 +26,9 @@ public:
     static double getCheckIntervalSeconds();                // Returns interval for checking arbitrage.
 
 private:
-    // Cached configuration values.
+    static nlohmann::json config_; // full JSON cache
+
+    // Cached common values
     static std::vector<std::string> symbols_;
     static std::string mode_;
     static double feesPercent_;

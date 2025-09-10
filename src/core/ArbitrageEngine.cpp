@@ -128,7 +128,7 @@ void ArbitrageEngine::checkArbitrage(const std::string& symbol) {
         double sellCapQty = sellRoomUsd / bestBid;
 
         double reqQty = std::max(0.0, std::min({ obCapQty, buyCapQty, sellCapQty }));
-        if (reqQty * bestAsk <= 10.0) return;
+        if (reqQty * bestAsk <= 150.0) return;
 
         Logger::info("ARB >> " + symbol + " | BUY " + exchangeBuy + " @ " + std::to_string(bestAsk) +
                     " | SELL " + exchangeSell + " @ " + std::to_string(bestBid) +

@@ -35,7 +35,7 @@ public:
     void requestReconnect(const std::string& symbol) override;
 
     // Hook for the multi-channel watchdog (non-owning)
-    void setWatchdog(Watchdog* wd) { watchdog_ = wd; }
+    void setWatchdog(Watchdog* wd) override { watchdog_ = wd; }
 
 private:
     // Start a WebSocket connection for a symbol.
